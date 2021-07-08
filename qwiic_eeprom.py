@@ -180,7 +180,7 @@ class QwiicEEPROM(object):
             i2c_address = self.address
 
         # DEBUG: what the heck is this?!
-        if self.is_connected(i2c_address)
+        if self.is_connected(i2c_address):
             return False
         return True
 
@@ -237,3 +237,219 @@ class QwiicEEPROM(object):
             :rtype: int
         """
         return self.page_size_bytes
+    
+    # ----------------------------------------------------------------------------
+    # set_page_write_time(write_time_ms)
+    #
+    # Set the number of ms required per page write
+    def set_page_write_time(self, write_time_ms):
+        """
+            Set the number of ms required per page write
+
+            :param write_time_ms: write time in ms
+            :return: Nothing
+            :rtype: Void
+        """
+        self.page_write_time_ms = write_time_ms
+    
+    # ----------------------------------------------------------------------------
+    # get_page_write_time()
+    #
+    # Get the current time required per page write
+    def get_page_write_time(self):
+        """
+            Get the current time required per page write
+
+            :return: Time required per page write
+            :rtype: int
+        """
+        return self.page_write_time_ms
+    
+    # ---------------------------------------------------------------------------
+    # enable_poll_for_write_complete()
+    #
+    # Most EEPROMs allow I2C polling of when a write has completed
+    def enable_poll_for_write_complete(self):
+        """
+            Enable I2C polling of when a write has completed
+
+            :return: Nothing
+            :rtype: Void
+        """
+        self.poll_for_write_complete = True
+
+    # --------------------------------------------------------------------------
+    # disable_poll_for_write_complete()
+    #
+    # Disable polling of when a write has completed
+    def disable_poll_for_write_complete(self):
+        """
+            Disable polling of when a write has completed
+
+            :return: Nothing
+            :rtype: Void
+        """
+        self.poll_for_write_complete = False
+
+    # --------------------------------------------------------------------------
+    # get_I2C_buffer_size()
+    #
+    # Return the size of the TX buffer
+    def get_I2C_buffer_size(self):
+        """
+            Return the size of the TX buffer
+
+            :return: I2C_BUFFER_LENGTH_TX
+            :rtype: int
+        """
+        return self.I2C_BUFFER_LENGTH
+    
+    # --------------------------------------------------------------------------
+    # read_byte(eeprom_location)
+    #
+    # Read a byte from a given location
+    def read_byte(self, eeprom_location):
+        """
+            Read a byte from a given location
+
+            :param eeprom_location: location of EEPROM to read byte from
+            :return: byte read
+            :rtype: int
+        """
+        temp_byte = 0
+        self.read(eeprom_location, temp_byte, 1)
+        return temp_byte
+    
+    # -------------------------------------------------------------------------
+    # read(eeprom_location, buff, bufer_size)
+    #
+    # Bulk reads from EEPROM 
+    # Handles breaking up read amt into 32 byte chunks (can be overridden with set_I2C_buffer_size)
+    # Hangles a read that straddles the 512kbit barrier
+    def read(self, eeprom_location, buff, buffer_size):
+        """
+            Bulk reads from EEPROM
+            Handles breaking up read amt into 32 byte chunks (can be overridden 
+            with set_I2C_buffer_size)
+            Handles a read that straddles the 512kbit barrier
+            
+            :param eeprom_location: location in EEPROM to start reading from 
+            :param buff: buffer which holds the bytes that have been read
+            :param buffer_size: number of bytes to be read from EEPROM
+            :return: Nothing
+            :rtype: Void
+        """
+        received = 0
+
+        while received < buffer_size:
+
+            # Limit the amount to write to a page size
+            amt_to_read = buffer_size - received
+
+            # TODO: not sure about this part
+            # What is the rasppi I2C buffer size limit?
+            if amt_to_read > self.I2C_BUFFER_LENGTH:
+                amt_to_read = self.I2C_BUFFER_LENGTH
+            
+            # Check if we are dealing with large (>512kbit) EEPROMs
+            i2c_address = self.address
+            
+            if self.memory_size_bytes > 0xFFFF:
+                # Figure out if we are going to cross the barrier with this read
+                if eeprom_location + received < 0xFFFF:
+                    if 0xFF - (eeprom_location + received) < amt_to_read:
+                        amt_to_read = 0xFFFF - (eeprom_location + received)
+                    
+                # Figure out if we are accessing the lower half or the upper half
+                if eeprom_location + received > 0xFFFF:
+                    i2c_address |= 0b100    # Set the block bit to 1
+                
+            # See if EEPROM is available or still writing to a previous request
+            # TODO: need to figure out what the RaspPi equivalent function is to isBusy()
+            while self.poll_for_write_complete & isBusy(i2c_address) == True:
+                time.sleep(0.1) # This shortens the amount of time waiting between writes but hammers the I2C bus
+            
+            self._i2c.writeByte((eeprom_location + received) >> 8)  # MSB
+            self._i2c.writeByte((eeprom_location + received) & 0xFF)    # LSB
+
+            # TODO: not sure if this is right
+            buff = self._i2c.readBloc(self.address, 0, amt_to_read)
+            
+            received += amt_to_read
+
+    # -------------------------------------------------------------------------------------------
+    # write_byte(eeprom_location, data_to_write)
+    #
+    # Write a byte to a given EEPROM location
+    def write_byte(self, eeprom_location, data_to_write):
+        """
+            Write a byte to a given EEPROM location
+
+            :param eeprom_location: location in EEPROM to write byte to 
+            :param data_to_write: the byte to be written to EEPROM
+            :return: Nothing
+            :rtype: Void
+        """
+        if self.read(eeprom_location) != data_to_write: # Update only if data is new
+            self.write(eeprom_location, data_to_write, 1)
+    
+    # -------------------------------------------------------------------------------------------
+    # write(eeprom_location, data_to_write, buffer_size)
+    #
+    # Write large bulk amounts
+    # Limits writes to the I2C buffer size (default is 32 bytes)
+    def read(self, eeprom_location, data_to_write, buffer_size):
+        """
+            Write large bulk amounts of data
+            Limits writes to the I2C buffer size (default is 32 bytes)
+
+            :param eeprom_location: location in EEPROM to write data to 
+            :param data_to_write: list of bytes to be written to EEPROM
+            :param buffer_size: length of the data_to_write list
+            :return: Nothing
+            :rtype: Void
+        """
+        # Error check
+        if eeprom_location + buffer_size >= self.memory_size_bytes:
+            buffer_size = self.memory_size_bytes - eeprom_location
+        
+        max_write_size = self.page_size_bytes
+        if max_write_size > self.I2C_BUFFER_LENGTH - 2:
+            max_write_size = self.I2C_BUFFER_LENGTH - 2 # TODO: need to find out the I2C transaction limit of rasp pi
+        
+        # Break the buffer into page sized chunks
+        recorded = 0
+        while recorded < buffer_size:
+            # Limit the amount to write to either the page size or the Rasp Pi limit of #TODO: what?
+            amt_to_write = buffer_size - recorded
+            if amt_to_write > max_write_size:
+                amt_to_write = max_write_size
+            
+            if amt_to_write > 1:
+                # check for crossing of a page line. Writes cannot cross a page line.
+                page_number_1 = (eeprom_location + recorded) / self.page_size_bytes
+                page_number_2 = (eeprom_location + recorded + amt_to_write - 1) / self.page_size_bytes
+                if page_number_2 > page_number_1:
+                    amt_to_write = (page_number_2 * self.page_size_bytes) - (eeprom_location + recorded) # Limit the read amt to go right up to edge of page barrier
+
+            i2c_address = self.address
+            # Check if we are dealing with large (>512kbit) EEPROMs
+            if self.memory_size_bytes > 0xFFFF:
+                # Figure out if we are accessing the lower half or the upper half
+                if eeprom_location + recorded > 0xFFFF:
+                    i2c_address |= 0b100    # Set the block bit to 1
+            
+            # See if EEPROM is available or still writing a previous request
+            while self.poll_for_write_complete & isBusy(i2c_address) == True:   # Poll device
+                time.sleep(0.1) # This shortens the amountof time waiting between writes but hammers the I2C bus
+            
+            self._i2c.writeByte((eeprom_location + recorded) >> 8)  # MSB
+            self._i2c.writeByte((eeprom_location + recorded) & 0xFF)    # LSB
+            for x in range(0, amt_to_write):
+                self._i2c.writeByte(data_to_write[recorded + x])
+            
+            recorded += amt_to_write
+
+            if self.poll_for_write_complete == False:
+                # TODO: need to fix this delay call!
+                time.sleep(self.page_write_time_ms) # Delay the amount of time to record a page
