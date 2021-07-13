@@ -53,7 +53,7 @@ def run_example():
     print("\nSparkFun Qwiic EEPROM, Example 2\n")
     my_eeprom = qwiic_eeprom.QwiicEEPROM()
 
-    if my_eeprom.begin() != 0:
+    if my_eeprom.begin() != True:
         print("\nThe Qwiic EEPROM isn't connected to the system. Please check your connection", \
             file=sys.stderr)
         return
@@ -63,16 +63,26 @@ def run_example():
     # Set settings for this EEPROM
     my_eeprom.set_memory_size(512000/8) # In bytes. 512kbit = 64kbyte
     my_eeprom.set_page_size(128)    # in bytes. Has 128 byte page size.
-    my_eeprom.enable_poll_for_write_complete()  # Supports I2C polling of write completion
+    my_eeprom.disable_poll_for_write_complete()  # Supports I2C polling of write completion
     my_eeprom.set_page_write_time(3)    # 3 ms max write time
 
-    print("\nMem size in bytes: " + str(my_eeprom.length()))
+    print("\nMem size in bytes: " + str(my_eeprom.get_memory_size()))
+    print("\nPage size in bytes: " + str(my_eeprom.get_page_size()))
+    
+    if my_eeprom.poll_for_write_complete == True:
+        temp_bool = True
+    else:
+        temp_bool = False
+    
+    print("\nEnable poll for write complete? " + str(temp_bool))
+    print("\nThe page write time is: " + str(my_eeprom.get_page_write_time()) + " ms")
+    print("\nThe I2C buffer size is: " + str(my_eeprom.get_I2C_buffer_size()))
 
-    my_value = -7.35
-    my_eeprom.write(20, my_value)   # (location, data)
-    my_read = 0
-    my_eeprom.read(20, my_read) # (location to read, thing to put data into)
-    print("\nI read: " + str(my_read))
+    # my_value = -7.35
+    # my_eeprom.write(20, my_value)   # (location, data)
+    # my_read = 0
+    # my_eeprom.read(20, my_read) # (location to read, thing to put data into)
+    # print("\nI read: " + str(my_read))
 
 if __name__ == '__main__':
     try:

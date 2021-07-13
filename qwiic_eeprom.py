@@ -316,7 +316,7 @@ class QwiicEEPROM(object):
             :return: byte read
             :rtype: int
         """
-        temp_byte = 0
+        temp_byte = []
         self.read(eeprom_location, temp_byte, 1)
         return temp_byte
     
@@ -325,7 +325,7 @@ class QwiicEEPROM(object):
     #
     # Bulk reads from EEPROM 
     # Handles breaking up read amt into 32 byte chunks (can be overridden with set_I2C_buffer_size)
-    # Hangles a read that straddles the 512kbit barrier
+    # Handles a read that straddles the 512kbit barrier
     def read(self, eeprom_location, buff, buffer_size):
         """
             Bulk reads from EEPROM
@@ -357,23 +357,38 @@ class QwiicEEPROM(object):
             if self.memory_size_bytes > 0xFFFF:
                 # Figure out if we are going to cross the barrier with this read
                 if eeprom_location + received < 0xFFFF:
-                    if 0xFF - (eeprom_location + received) < amt_to_read:
-                        amt_to_read = 0xFFFF - (eeprom_location + received)
+                    if 0xFFFF - (eeprom_location + received) < amt_to_read:   # 0xFFFF - 0xFFFA < 32
+                        amt_to_read = 0xFFFF - (eeprom_location + received) # Limit the read amt to right up to edge of barrier
                     
                 # Figure out if we are accessing the lower half or the upper half
                 if eeprom_location + received > 0xFFFF:
                     i2c_address |= 0b100    # Set the block bit to 1
                 
             # See if EEPROM is available or still writing to a previous request
-            # TODO: need to figure out what the RaspPi equivalent function is to isBusy()
-            while self.poll_for_write_complete & isBusy(i2c_address) == True:
+            while self.poll_for_write_complete & self.is_busy(i2c_address) == True:
                 time.sleep(0.1) # This shortens the amount of time waiting between writes but hammers the I2C bus
             
-            self._i2c.writeByte((eeprom_location + received) >> 8)  # MSB
-            self._i2c.writeByte((eeprom_location + received) & 0xFF)    # LSB
+            # self._i2c.writeCommand(self.address, (eeprom_location + received) >> 8)  # MSB
+            # self._i2c.writeCommand(self.address, (eeprom_location + received) & 0xFF)    # LSB
 
-            # TODO: not sure if this is right
-            buff = self._i2c.readBloc(self.address, 0, amt_to_read)
+            # # TODO: not sure if this is right
+            # buff = self._i2c.readBlock(self.address, 0, amt_to_read)
+            
+            # SECOND TRY
+            # eeprom_address_MSB = (eeprom_location + received) >> 8
+            # eeprom_address_LSB = (eeprom_location + received) & 0xFF
+            
+            # self._i2c.writeByte(self.address, eeprom_address_MSB, eeprom_address_LSB)
+            # buff = self._i2c.readBlock(self.address, 0, amt_to_read)
+            
+            # THIRD TRY
+            eeprom_address_MSB = (eeprom_location + received) >> 8
+            eeprom_address_LSB = (eeprom_location + received) & 0xFF
+            
+            write_list = [eeprom_address_MSB, eeprom_address_LSB]
+            read_list = self._i2c.__i2c_rdwr__(self.address, write_list, amt_to_read)
+            
+            buff.append(read_list)
             
             received += amt_to_read
 
@@ -390,15 +405,16 @@ class QwiicEEPROM(object):
             :return: Nothing
             :rtype: Void
         """
-        if self.read(eeprom_location) != data_to_write: # Update only if data is new
-            self.write(eeprom_location, data_to_write, 1)
+        #temp_list = [data_to_write]
+        if self.read_byte(eeprom_location) != data_to_write: # Update only if data is new
+            self.write(eeprom_location, data_to_write)
     
     # -------------------------------------------------------------------------------------------
     # write(eeprom_location, data_to_write, buffer_size)
     #
     # Write large bulk amounts
     # Limits writes to the I2C buffer size (default is 32 bytes)
-    def read(self, eeprom_location, data_to_write, buffer_size):
+    def write(self, eeprom_location, data_to_write):
         """
             Write large bulk amounts of data
             Limits writes to the I2C buffer size (default is 32 bytes)
@@ -409,6 +425,16 @@ class QwiicEEPROM(object):
             :return: Nothing
             :rtype: Void
         """
+        # Convert int to list of bytes
+        data_list = data_to_write.to_bytes(1, 'big')
+        buffer_size = len(data_list)
+        
+        # DEBUG
+        print("\nThis is the data list: ")
+        print(data_list)
+        print("\nThis is the buffer size: ")
+        print(buffer_size)
+        
         # Error check
         if eeprom_location + buffer_size >= self.memory_size_bytes:
             buffer_size = self.memory_size_bytes - eeprom_location
@@ -440,16 +466,31 @@ class QwiicEEPROM(object):
                     i2c_address |= 0b100    # Set the block bit to 1
             
             # See if EEPROM is available or still writing a previous request
-            while self.poll_for_write_complete & isBusy(i2c_address) == True:   # Poll device
+            while self.poll_for_write_complete & self.is_busy(i2c_address) == True:   # Poll device
                 time.sleep(0.1) # This shortens the amountof time waiting between writes but hammers the I2C bus
             
-            self._i2c.writeByte((eeprom_location + recorded) >> 8)  # MSB
-            self._i2c.writeByte((eeprom_location + recorded) & 0xFF)    # LSB
+            # self._i2c.writeCommand(self.address, (eeprom_location + recorded) >> 8)  # MSB
+            # self._i2c.writeCommand(self.address, (eeprom_location + recorded) & 0xFF)    # LSB
+            # for x in range(0, amt_to_write):
+                # temp = data_list[recorded + x]
+                
+                # # Debug
+                # print("\nThis is temp: ")
+                # print(temp)
+                
+                # self._i2c.writeCommand(self.address, temp)
+            
+            eeprom_address_MSB = (eeprom_location + recorded) >> 8
+            eeprom_address_LSB = (eeprom_location + recorded) & 0xFF
+            temp_write_list = [eeprom_address_LSB]
+            
             for x in range(0, amt_to_write):
-                self._i2c.writeByte(data_to_write[recorded + x])
+                temp_write_list.append(data_list[recorded + x])
+            
+            # Now, set up the full write
+            self._i2c.writeBlock(self.address, eeprom_address_MSB, temp_write_list)
             
             recorded += amt_to_write
 
             if self.poll_for_write_complete == False:
-                # TODO: need to fix this delay call!
-                time.sleep(self.page_write_time_ms) # Delay the amount of time to record a page
+                time.sleep(self.page_write_time_ms / 1000) # Delay the amount of time to record a page
