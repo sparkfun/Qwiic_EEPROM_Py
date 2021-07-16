@@ -69,20 +69,10 @@ def run_example():
     print("\nMem size in bytes: " + str(my_eeprom.get_memory_size()))
     print("\nPage size in bytes: " + str(my_eeprom.get_page_size()))
     
-    if my_eeprom.poll_for_write_complete == True:
-        temp_bool = True
-    else:
-        temp_bool = False
-    
-    print("\nEnable poll for write complete? " + str(temp_bool))
-    print("\nThe page write time is: " + str(my_eeprom.get_page_write_time()) + " ms")
-    print("\nThe I2C buffer size is: " + str(my_eeprom.get_I2C_buffer_size()))
-
-    # my_value = -7.35
-    # my_eeprom.write(20, my_value)   # (location, data)
-    # my_read = 0
-    # my_eeprom.read(20, my_read) # (location to read, thing to put data into)
-    # print("\nI read: " + str(my_read))
+    my_value = -7.35
+    my_eeprom.write_float(20, my_value) # (location, data)
+    my_read = my_eeprom.read_float(20)  # (location)
+    print("\nI read: " + str(my_read))
 
 if __name__ == '__main__':
     try:

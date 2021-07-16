@@ -52,6 +52,8 @@ New to qwiic? Take a look at the entire [SparkFun Qwiic Ecosystem](https://www.s
 import math
 import time
 import qwiic_i2c
+import smbus2
+import struct
 
 _DEFAULT_NAME = "Qwiic EEPROM"
 
@@ -143,14 +145,12 @@ class QwiicEEPROM(object):
         """
         temp_buffer = []
 
-        for x in range(0, page_size_bytes):
-            temp_buffer[x] = to_write
+        for x in range(0, self.page_size_bytes):
+            temp_buffer.append(to_write)
         
-        for addr in range(0, self.length(), page_size_bytes):
-            self.write(addr, temp_buffer, page_size_bytes)
+        for addr in range(0, int(self.length()), self.page_size_bytes):
+            self.write(addr, temp_buffer)
     
-    # DEBUG: Why do we have two functions that DO EXACTLY THE SAME THING?!
-    # Same as get_memory_size()
     # ----------------------------------------------------------------------------
     # length()
     #
@@ -292,6 +292,20 @@ class QwiicEEPROM(object):
         self.poll_for_write_complete = False
 
     # --------------------------------------------------------------------------
+    # set_I2C_buffer_size(buff_size)
+    #
+    # Set the size of the TX buffer
+    def set_I2C_buffer_size(self, buff_size):
+        """
+            Set the size of the TX buffer
+            
+            :param buff_size: the size of the I2C buffer
+            :return: nothing
+            :rtype: Void
+        """
+        self.I2C_BUFFER_LENGTH = buff_size
+        
+    # --------------------------------------------------------------------------
     # get_I2C_buffer_size()
     #
     # Return the size of the TX buffer
@@ -304,50 +318,129 @@ class QwiicEEPROM(object):
         """
         return self.I2C_BUFFER_LENGTH
     
-    # --------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
     # read_byte(eeprom_location)
     #
-    # Read a byte from a given location
+    # Read a byte from a given EEPROM location
     def read_byte(self, eeprom_location):
-        """
-            Read a byte from a given location
-
-            :param eeprom_location: location of EEPROM to read byte from
-            :return: byte read
-            :rtype: int
-        """
-        temp_byte = []
-        self.read(eeprom_location, temp_byte, 1)
-        return temp_byte
-    
-    # -------------------------------------------------------------------------
-    # read(eeprom_location, buff, bufer_size)
-    #
-    # Bulk reads from EEPROM 
-    # Handles breaking up read amt into 32 byte chunks (can be overridden with set_I2C_buffer_size)
-    # Handles a read that straddles the 512kbit barrier
-    def read(self, eeprom_location, buff, buffer_size):
         """
             Bulk reads from EEPROM
             Handles breaking up read amt into 32 byte chunks (can be overridden 
             with set_I2C_buffer_size)
             Handles a read that straddles the 512kbit barrier
             
-            :param eeprom_location: location in EEPROM to start reading from 
-            :param buff: buffer which holds the bytes that have been read
-            :param buffer_size: number of bytes to be read from EEPROM
+            :param eeprom_location: location in EEPROM to read byte from
             :return: Nothing
             :rtype: Void
         """
+        # TODO: I think i can get rid of this soon
+        # amt_to_read = 1
+        # eeprom_address_MSB = (eeprom_location) >> 8
+        # eeprom_address_LSB = (eeprom_location) & 0xFF
+        
+        # self._i2c.writeByte(self.address, eeprom_address_MSB, eeprom_address_LSB)
+        # read_list = self._i2c.readByte(self.address)
+        
+        read_list = self.read(eeprom_location, 1)
+        
+        return read_list[0]
+    
+    # ---------------------------------------------------------------------------
+    # read_int(eeprom_location)
+    # 
+    # Read a 32-bit signed int from a given EEPROM location
+    def read_int(self, eeprom_location):
+        """
+            Hello docstring
+        """
+        num_bytes = 4   # Default to 32-bit integer
+        read_list = self.read(eeprom_location, num_bytes) 
+        
+        # Debug
+        print("\nThis is read_list: ")
+        print(read_list)
+        
+        # Convert list of bytes into one big int
+        # First, cast list into "bytes" type
+        int_bytes = bytes(read_list)
+        # Then, conver to int
+        int_val = int.from_bytes(int_bytes, "big", signed=True)
+        
+        # # Convert list into one big int
+        # int_bytes = 0
+        # for i in range(0, num_bytes):
+            # int_bytes = (read_list[ (num_bytes - 1)  - i] << (i * 8)) + int_bytes
+        
+        return int_val
+    
+    # ----------------------------------------------------------------------------
+    # read_float(eeprom_location)
+    #
+    # Read 32-bit float from given EEPROM location
+    def read_float(self, eeprom_location):
+        """
+            Hello docstring
+        """
+        num_bytes = 4
+        read_list = self.read(eeprom_location, num_bytes)
+        
+        # Convert list of bytes into a float
+        # Use bytearrays as we did in the write_float() function
+        byte_float = bytearray(read_list)
+        float_val = struct.unpack('f', byte_float)
+        
+        return float_val
+        
+    # ----------------------------------------------------------------------------
+    # read_string(eeprom_location, string_length)
+    #
+    # Read string
+    def read_string(self, eeprom_location, string_length):
+        """
+            Hello docstring
+        """
+        read_list = self.read(eeprom_location, string_length)
+        
+        # Convert a list of byte back into the string
+        byte_string = bytearray(read_list)
+        decoded_string = byte_string.decode()
+        
+        return decoded_string
+        
+    # def read(self, eeprom_location, amt_to_read):
+        # eeprom_address_MSB = (eeprom_location) >> 8
+        # eeprom_address_LSB = (eeprom_location) & 0xFF
+        
+        # write_list = [eeprom_address_MSB, eeprom_address_LSB]
+        # read_list = list(self._i2c.__i2c_rdwr__(self.address, write_list, amt_to_read))
+        
+        # return read_list
+    
+    # -----------------------------------------------------------------------------------
+    # read(eeprom_location, amt_to_read)
+    #
+    # Bulk read from EEPROM.
+    # Handles breaking up read amt into 32 byte chunks (can be overidden with set_I2C_buffer_size())
+    # Handles a read that straddles the 512kbit barrier    
+    def read(self, eeprom_location, num_bytes):
+        """
+            Bulk read from EEPROM.
+            Handles breaking up read amt into 32 byte chunks (can be 
+            overidden with set_I2C_buffer_size()
+            Handles a read that straddles the 512kbit barrier
+            
+            :param eeprom_location: address of EEPROM to start reading from
+            :param num_bytes: number of bytes to be read from external EEPROM
+            :return: a list of bytes read from EEPROM
+            :rtype: list
+        """
         received = 0
+        data_list = []
 
-        while received < buffer_size:
+        while received < num_bytes:
 
             # Limit the amount to write to a page size
-            amt_to_read = buffer_size - received
-
-            # TODO: not sure about this part
-            # What is the rasppi I2C buffer size limit?
+            amt_to_read = num_bytes - received
             if amt_to_read > self.I2C_BUFFER_LENGTH:
                 amt_to_read = self.I2C_BUFFER_LENGTH
             
@@ -363,85 +456,159 @@ class QwiicEEPROM(object):
                 # Figure out if we are accessing the lower half or the upper half
                 if eeprom_location + received > 0xFFFF:
                     i2c_address |= 0b100    # Set the block bit to 1
-                
+              
             # See if EEPROM is available or still writing to a previous request
-            while self.poll_for_write_complete & self.is_busy(i2c_address) == True:
-                time.sleep(0.1) # This shortens the amount of time waiting between writes but hammers the I2C bus
+            if self.poll_for_write_complete == True:
+                while self.is_busy(i2c_address) == True:
+                    time.sleep(0.1) # This shortens the amount of time waiting between writes but hammers the I2C bus
             
-            # self._i2c.writeCommand(self.address, (eeprom_location + received) >> 8)  # MSB
-            # self._i2c.writeCommand(self.address, (eeprom_location + received) & 0xFF)    # LSB
-
-            # # TODO: not sure if this is right
-            # buff = self._i2c.readBlock(self.address, 0, amt_to_read)
-            
-            # SECOND TRY
-            # eeprom_address_MSB = (eeprom_location + received) >> 8
-            # eeprom_address_LSB = (eeprom_location + received) & 0xFF
-            
-            # self._i2c.writeByte(self.address, eeprom_address_MSB, eeprom_address_LSB)
-            # buff = self._i2c.readBlock(self.address, 0, amt_to_read)
-            
-            # THIRD TRY
             eeprom_address_MSB = (eeprom_location + received) >> 8
             eeprom_address_LSB = (eeprom_location + received) & 0xFF
-            
+        
             write_list = [eeprom_address_MSB, eeprom_address_LSB]
-            read_list = self._i2c.__i2c_rdwr__(self.address, write_list, amt_to_read)
+            read_list = list(self._i2c.__i2c_rdwr__(self.address, write_list, amt_to_read))
             
-            buff.append(read_list)
+            data_list.extend(read_list)
             
-            received += amt_to_read
-
+            received = received + amt_to_read
+        
+        # Debug
+        print("\nThis is data list: ")
+        print(data_list)
+        
+        return data_list
+        
     # -------------------------------------------------------------------------------------------
-    # write_byte(eeprom_location, data_to_write)
+    # write_byte(eeprom_location, byte_to_write)
     #
     # Write a byte to a given EEPROM location
-    def write_byte(self, eeprom_location, data_to_write):
-        """
-            Write a byte to a given EEPROM location
-
-            :param eeprom_location: location in EEPROM to write byte to 
-            :param data_to_write: the byte to be written to EEPROM
-            :return: Nothing
-            :rtype: Void
-        """
-        #temp_list = [data_to_write]
-        if self.read_byte(eeprom_location) != data_to_write: # Update only if data is new
-            self.write(eeprom_location, data_to_write)
-    
-    # -------------------------------------------------------------------------------------------
-    # write(eeprom_location, data_to_write, buffer_size)
-    #
-    # Write large bulk amounts
-    # Limits writes to the I2C buffer size (default is 32 bytes)
-    def write(self, eeprom_location, data_to_write):
+    def write_byte(self, eeprom_location, byte_to_write):
         """
             Write large bulk amounts of data
             Limits writes to the I2C buffer size (default is 32 bytes)
 
             :param eeprom_location: location in EEPROM to write data to 
-            :param data_to_write: list of bytes to be written to EEPROM
-            :param buffer_size: length of the data_to_write list
+            :param byte_to_write: list of bytes to be written to EEPROM
             :return: Nothing
             :rtype: Void
         """
-        # Convert int to list of bytes
-        data_list = data_to_write.to_bytes(1, 'big')
-        buffer_size = len(data_list)
+        # TODO: I think we might be able to get rid of this extra code...
+        # eeprom_address_MSB = (eeprom_location) >> 8
+        # eeprom_address_LSB = (eeprom_location) & 0xFF
+        # temp_write_list = [eeprom_address_LSB, byte_to_write]
+            
+        # # Now, set up the full write
+        # self._i2c.writeBlock(self.address, eeprom_address_MSB, temp_write_list)
+        byte_list = [byte_to_write]
+        self.write(eeprom_location, byte_list)
+    
+    # --------------------------------------------------------------------------------------------
+    # write_int()
+    #
+    # Write an int (signed/unsigned) to a given EEPROM location
+    def write_int(self, eeprom_location, int_to_write):
+        """
+            Hello docstring
+        """
+        # Convert int to a list of bytes
+        num_bytes = 4 # Defaulting to 32-bit int
+        list_int = list(int_to_write.to_bytes(num_bytes, "big", signed=True))
         
-        # DEBUG
-        print("\nThis is the data list: ")
-        print(data_list)
-        print("\nThis is the buffer size: ")
-        print(buffer_size)
+        # Remove leading zeros
+        #int_list = [i for i in int_list if i != 0]
+            
+        # Debug
+        print("\nThis is list_int: ")
+        print(list_int)
+        
+        self.write(eeprom_location, list_int)
+    
+    # ----------------------------------------------------------------------------------------------
+    # write_float()
+    def write_float(self, eeprom_location, float_to_write):
+        """
+            Hello docstring
+        """
+        # Convert float into a bytearray
+        byte_float = bytearray(struct.pack('f', float_to_write))
+        # Convert bytearray to list
+        list_float = list(byte_float)
+        
+        # Debug
+        print("\nThis is list_float: ")
+        print(list_float)
+        
+        self.write(eeprom_location, list_float)
+    
+    # ----------------------------------------------------------------------------------------------------
+    # write_string()
+    def write_string(self, eeprom_location, string_to_write):
+        """
+            Hello docstring
+        """
+        # Convert string into a bytearray
+        #byte_string = bytearray(struct.pack('s', string_to_write))
+        
+        encoded_string = string_to_write.encode()
+        byte_string = bytearray(encoded_string)
+        # Convert bytearray to list
+        list_string = list(byte_string)
+        
+        # Debug
+        print("\nThis is list_string: ")
+        print(list_string)
+        
+        self.write(eeprom_location, list_string)
+    
+    # TODO: can we get rid of this function?
+    # # ----------------------------------------------------------------------------------------------
+    # # write
+    # #
+    # # Write a list of bytes of any length to EEPROM
+    # def write(self, eeprom_location, data_list):
+        # """
+            # Hello docstring
+        # """
+        # # Break the EEPROM  location address into 2 separate bytes
+        # eeprom_address_MSB = (eeprom_location) >> 8
+        # eeprom_address_LSB = (eeprom_location) & 0xFF
+        
+        # # Create a list of data bytes to write to EEPROM
+        # temp_write_list = [eeprom_address_LSB]
+        # temp_write_list.extend(data_list)
+        
+        # # Debug
+        # print("\nThis is temp_write_list: ")
+        # print(temp_write_list)
+        
+        # # Now, set up the full write
+        # self._i2c.writeBlock(self.address, eeprom_address_MSB, temp_write_list)
+        
+    # -------------------------------------------------------------------------------------------------
+    # write
+    #
+    # Write large bulk amounts to EEPROM. Limits writes to the I2C buffer size
+    # (default is 32 bytes).
+    def write(self, eeprom_location, data_list):
+        """
+            Write large bulk amounts to EEPROM. Limits write to the I2C buffer size
+            (default is 32 bytes).
+            
+            :param eeprom_location: 2-byte EEPROM address to write to 
+            :param data_list: list of data bytes to be written to EEPROM 
+                sequentially, starting at the EEPROM address
+            :rtype: Void
+            :return: nothing
+        """
+        buffer_size = len(data_list)
         
         # Error check
         if eeprom_location + buffer_size >= self.memory_size_bytes:
             buffer_size = self.memory_size_bytes - eeprom_location
         
         max_write_size = self.page_size_bytes
-        if max_write_size > self.I2C_BUFFER_LENGTH - 2:
-            max_write_size = self.I2C_BUFFER_LENGTH - 2 # TODO: need to find out the I2C transaction limit of rasp pi
+        if max_write_size > self.I2C_BUFFER_LENGTH:
+            max_write_size = self.I2C_BUFFER_LENGTH
         
         # Break the buffer into page sized chunks
         recorded = 0
@@ -466,26 +633,16 @@ class QwiicEEPROM(object):
                     i2c_address |= 0b100    # Set the block bit to 1
             
             # See if EEPROM is available or still writing a previous request
-            while self.poll_for_write_complete & self.is_busy(i2c_address) == True:   # Poll device
-                time.sleep(0.1) # This shortens the amountof time waiting between writes but hammers the I2C bus
+            if self.poll_for_write_complete == True:
+                while self.is_busy(i2c_address) == True:   # Poll device
+                    time.sleep(0.1) # This shortens the amountof time waiting between writes but hammers the I2C bus
             
-            # self._i2c.writeCommand(self.address, (eeprom_location + recorded) >> 8)  # MSB
-            # self._i2c.writeCommand(self.address, (eeprom_location + recorded) & 0xFF)    # LSB
-            # for x in range(0, amt_to_write):
-                # temp = data_list[recorded + x]
-                
-                # # Debug
-                # print("\nThis is temp: ")
-                # print(temp)
-                
-                # self._i2c.writeCommand(self.address, temp)
-            
-            eeprom_address_MSB = (eeprom_location + recorded) >> 8
-            eeprom_address_LSB = (eeprom_location + recorded) & 0xFF
+            eeprom_address_MSB = (eeprom_location + int(recorded)) >> 8
+            eeprom_address_LSB = (eeprom_location + int(recorded)) & 0xFF
             temp_write_list = [eeprom_address_LSB]
             
-            for x in range(0, amt_to_write):
-                temp_write_list.append(data_list[recorded + x])
+            for x in range(0, int(amt_to_write)):
+                temp_write_list.append(data_list[int(recorded) + x])
             
             # Now, set up the full write
             self._i2c.writeBlock(self.address, eeprom_address_MSB, temp_write_list)
@@ -494,3 +651,5 @@ class QwiicEEPROM(object):
 
             if self.poll_for_write_complete == False:
                 time.sleep(self.page_write_time_ms / 1000) # Delay the amount of time to record a page
+            
+            time.sleep(0.005)

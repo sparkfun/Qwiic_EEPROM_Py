@@ -58,26 +58,20 @@ def run_example():
 
     print("\nMem size in bytes: " + str(my_eeprom.length()))
 
-    # Yes you can read and write bytes, but you shouldn't!
-    my_value1 = 200
-    #my_eeprom.write_byte(0, my_value1)  # (location, data)
-    my_eeprom.write(0, my_value1)  # (location, data)
+    my_value1 = 200 # 0xC8
+    my_eeprom.write_byte(300, my_value1)  # (location = 0x12C, data byte)
+    my_read1 = my_eeprom.read_byte(300) # (location = 0x12C)
+    print("\nI read: " + str(my_read1)) # Should be 0xC8 = 200
+    
+    my_value2 = -366
+    my_eeprom.write_int(10, my_value2)
+    my_read2 = my_eeprom.read_int(10)    # (location)
+    print("\nI read: " + str(my_read2))
 
-    my_read1 = []
-    my_eeprom.read(0, my_read1, 1)
-    print("\nI read: " + str(my_read1))
-
-    # my_value2 = -366
-    # my_eeprom.write(10, my_value2)
-    # my_read2 = 0
-    # my_eeprom.read(10, my_read2)    # (location to read, thing to put data into)
-    # print("\nI read: " + str(my_read2))
-
-    # my_value3 = -7.35
-    # my_eeprom.write(20, my_value3)
-    # my_read3 = 0
-    # my_eeprom.read(20, my_read3)    # (location to read, thing to put data into)
-    # print("\nI read: " + str(my_read3))
+    my_value3 = -7.35
+    my_eeprom.write_float(9, my_value3)
+    my_read3 = my_eeprom.read_float(9)    # (location)
+    print("\nI read: " + str(my_read3))
 
 if __name__ == '__main__':
     try:

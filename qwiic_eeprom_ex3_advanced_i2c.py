@@ -49,9 +49,9 @@ def run_example():
     EEPROM_ADDRESS = 0b1010001 # 0b1010(A2 A1 A0): A standard I2C EEPROM with the ADR0 bit set to VCC
 
     print("\nSparkFun Qwiic EEPROM, Example 3\n")
-    my_eeprom = qwiic_eeprom.QwiicEEPROM(EEPROM_ADDRESS)
+    my_eeprom = qwiic_eeprom.QwiicEEPROM(0x51)
 
-    if my_eeprom.begin() != 0:
+    if my_eeprom.begin() != True:
         print("\nThe Qwiic EEPROM isn't connected to the system. Please check your connection", \
             file=sys.stderr)
         return
@@ -59,9 +59,8 @@ def run_example():
     print("\nEEPROM ready!")
 
     my_value = -7.35
-    my_eeprom.write(20, my_value)   # (location, data)
-    my_read = 0
-    my_eeprom.read(20, my_read) # (location to read, thing to put data into)
+    my_eeprom.write_float(20, my_value)   # (location, data)
+    my_read = my_eeprom.read_float(20) # (location to read)
     print("\nI read: " + str(my_read))
 
 if __name__ == '__main__':
