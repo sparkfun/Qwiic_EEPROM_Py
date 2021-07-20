@@ -70,7 +70,9 @@ def load_user_settings(my_mem, settings):
         settings.baud_rate == my_mem.read_int(0)
         settings.log_date == my_mem.read_byte(4)
         settings.enable_IMU == my_mem.read_byte(5)
-        settings.cal_value == my_mem.read_float(6)
+        cal_val_temp = my_mem.read_float(6)
+        # Round to 2-decimal point precision
+        settings.cal_value == round(cal_val_temp, 2)
 
 # Record the current settings into EEPROM
 def record_user_settings(my_mem, settings):

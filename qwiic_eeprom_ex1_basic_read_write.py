@@ -71,6 +71,8 @@ def run_example():
     my_value3 = -7.35
     my_eeprom.write_float(9, my_value3)
     my_read3 = my_eeprom.read_float(9)    # (location)
+    # Round to 2-decimal point precision
+    my_read3 = round(my_read3, 2)
     print("\nI read: " + str(my_read3))
 
 if __name__ == '__main__':

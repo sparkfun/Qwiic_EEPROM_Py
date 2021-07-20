@@ -356,9 +356,9 @@ class QwiicEEPROM(object):
         num_bytes = 4   # Default to 32-bit integer
         read_list = self.read(eeprom_location, num_bytes) 
         
-        # Debug
-        print("\nThis is read_list: ")
-        print(read_list)
+        # # Debug
+        # print("\nThis is read_list: ")
+        # print(read_list)
         
         # Convert list of bytes into one big int
         # First, cast list into "bytes" type
@@ -387,8 +387,11 @@ class QwiicEEPROM(object):
         # Convert list of bytes into a float
         # Use bytearrays as we did in the write_float() function
         byte_float = bytearray(read_list)
-        float_val = struct.unpack('f', byte_float)
+        float_tuple = struct.unpack('f', byte_float)
         
+        # Extract float value from the tuple returned by the unpack() function
+        float_val = float_tuple[0]
+                
         return float_val
         
     # ----------------------------------------------------------------------------
@@ -472,9 +475,9 @@ class QwiicEEPROM(object):
             
             received = received + amt_to_read
         
-        # Debug
-        print("\nThis is data list: ")
-        print(data_list)
+        # # Debug
+        # print("\nThis is data list: ")
+        # print(data_list)
         
         return data_list
         
@@ -517,9 +520,9 @@ class QwiicEEPROM(object):
         # Remove leading zeros
         #int_list = [i for i in int_list if i != 0]
             
-        # Debug
-        print("\nThis is list_int: ")
-        print(list_int)
+        # # Debug
+        # print("\nThis is list_int: ")
+        # print(list_int)
         
         self.write(eeprom_location, list_int)
     
@@ -534,9 +537,9 @@ class QwiicEEPROM(object):
         # Convert bytearray to list
         list_float = list(byte_float)
         
-        # Debug
-        print("\nThis is list_float: ")
-        print(list_float)
+        # # Debug
+        # print("\nThis is list_float: ")
+        # print(list_float)
         
         self.write(eeprom_location, list_float)
     
@@ -554,9 +557,9 @@ class QwiicEEPROM(object):
         # Convert bytearray to list
         list_string = list(byte_string)
         
-        # Debug
-        print("\nThis is list_string: ")
-        print(list_string)
+        # # Debug
+        # print("\nThis is list_string: ")
+        # print(list_string)
         
         self.write(eeprom_location, list_string)
     
