@@ -1,5 +1,5 @@
 API Reference
 ==============
 
-.. automodule:: qwiic_eeprom_py
+.. automodule:: qwiic_eeprom
    :members:
